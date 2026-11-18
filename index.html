@@ -53,6 +53,13 @@
   textarea,input[type=text],input[type=password],input[type=url]{width:100%;border:1.5px solid var(--line);border-radius:14px;padding:11px 13px;background:#fafbfc;outline:none}
   textarea{min-height:76px;max-height:180px;resize:none}
   textarea:focus,input:focus{border-color:#9db6ff;background:#fff;box-shadow:0 0 0 4px rgba(47,107,255,.10)}
+  .mention-bar{display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap}
+  .mention-bar .lbl{font-size:12px;color:var(--faint);font-weight:700;margin-right:2px}
+  .mention-bar .lbl.on{color:var(--me)}
+  .mbtn{padding:6px 11px;border-radius:999px;font-size:13px;font-weight:800;background:var(--m-bg);color:var(--m);border:1.5px solid transparent;transition:.12s}
+  .mbtn:active{transform:scale(.95)}
+  .mbtn.suggest{border-color:var(--m);box-shadow:0 0 0 3px var(--m-bg)}
+  .mbtn.dim{opacity:.35}
   .foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
   .hint{font-size:12px;color:var(--faint)}
   .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 18px;border-radius:12px;font-weight:800;font-size:14px}
@@ -168,8 +175,9 @@
         <div class="card-title">AI에게 시킬 일 <small id="targetLabel"></small></div>
         <div class="chips" id="chips"></div>
         <textarea id="input" maxlength="1000" placeholder="시킬 일을 적어 주세요"></textarea>
+        <div class="mention-bar" id="mentionBar"></div>
         <div class="foot">
-          <span class="hint">Enter 보내기 · Shift+Enter 줄바꿈</span>
+          <span class="hint">Enter 보내기 · Tab 자동완성</span>
           <button class="btn btn-primary" id="sendBtn" disabled>지시 남기기</button>
         </div>
       </div>
@@ -267,12 +275,14 @@
   const PICKLE_PROMPT =
 `구글 드라이브의 "AI비서 협업" 시트에서 "AI협업" 탭을 열어 줘.
 '담당'이 피클이고 '상태'가 대기인 줄을 위에서부터 하나씩 처리해 줘.
-한 줄을 끝낼 때마다 그 줄의 '상태'를 완료로, '결과'에 무엇을 했는지 1~3줄로, '처리시각'에 지금 시각을 적어 줘.
-결제·예약 확정·외부 전화 전에는 반드시 나에게 먼저 확인받아 줘.
-다른 줄과 다른 탭은 수정하지 말아 줘.`;
+- '지시' 칸이 네가 할 일이고, '전체지시' 칸은 함께 하는 일 전체 내용이야. 참고만 하고 네 몫만 해 줘.
+- 같은 '묶음' 값을 가진 다른 줄의 '결과'를 참고해 줘. 그 묶음에서 '순서'가 너보다 앞선 줄이 아직 대기면, 그 줄은 건너뛰고 다음에 다시 확인해 줘.
+- 한 줄을 끝낼 때마다 그 줄의 '상태'를 완료로, '결과'에 무엇을 했는지 1~3줄로, '처리시각'에 지금 시각을 적어 줘.
+- 결제·예약 확정·외부 전화 전에는 반드시 나에게 먼저 확인받아 줘.
+- 다른 줄과 다른 탭은 수정하지 말아 줘.`;
 
   const EXAMPLES = [
-    { target:'all',    text:'다음 주 토요일 저녁 가족 외식할 곳 비교해 보고 예약까지 해 줘' },
+    { target:'all',    text:'@부이 토요일 저녁 가족 외식할 곳 3곳 비교해 줘 @피클 부이가 고른 곳 예약해 줘 @키링 캘린더에 일정 넣어 줘' },
     { target:'부이',    text:'무선 이어폰 3종 최저가랑 장단점 비교해 줘' },
     { target:'키링',    text:'이번 달 주말 약속이랑 할 일 정리해 줘' }
   ];
@@ -371,14 +381,27 @@
     pollTimer = setInterval(()=>{ if(document.visibilityState==='visible') refresh(true); }, 15000);
   }
 
-  /* ───────── 담당 고르기 ───────── */
-  function pickAssignees(text, tgt){
-    if(tgt !== 'all') return [tgt];
-    const named = []; let m; MENTION_RE.lastIndex = 0;
-    while((m = MENTION_RE.exec(text))){ if(AI[m[1]] && !named.includes(m[1])) named.push(m[1]); }
-    if(named.length) return named;
-    const hit = AIS.filter(a=>a.kw.some(k=>text.toLowerCase().includes(k)));
-    return (hit.length ? hit : AIS).map(a=>a.id);
+  /* ───────── 담당 고르기 ─────────
+     @이름이 있으면 그 뒤 내용만 그 AI 몫으로 나눠요.
+     없으면 고른 대상(또는 키워드로 고른 AI)에게 전체 지시를 줘요. */
+  const SPLIT_RE = /@(피클|키링|부이)/g;
+  function planTasks(text, tgt){
+    const marks = []; let m; SPLIT_RE.lastIndex = 0;
+    while((m = SPLIT_RE.exec(text))) marks.push({ who:m[1], start:m.index, end:m.index + m[0].length });
+    if(marks.length){
+      const byWho = new Map();
+      marks.forEach((mk,i)=>{
+        let part = text.slice(mk.end, i+1<marks.length ? marks[i+1].start : text.length);
+        part = part.replace(/^\s*(에게|한테|께|님|은|는|이|가)(?=[\s,:·])/,'').replace(/^[\s,:·]+/,'').replace(/[\s,·]+$/,'').trim();
+        if(!part) return;
+        byWho.set(mk.who, byWho.has(mk.who) ? byWho.get(mk.who) + '\n' + part : part);
+      });
+      if(byWho.size) return [...byWho].map(([who,task])=>({ who, task }));
+    }
+    if(tgt !== 'all') return [{ who:tgt, task:text }];
+    const lower = text.toLowerCase();
+    const hit = AIS.filter(a=>a.kw.some(k=>lower.includes(k)));
+    return (hit.length ? hit : AIS).map(a=>({ who:a.id, task:text }));
   }
 
   /* ───────── 보내기 ───────── */
@@ -386,15 +409,15 @@
     text = (text||'').trim();
     if(!text) return false;
     if(!cfg.url || !cfg.token){ toast('먼저 설정 탭에서 구글 시트를 연결해 주세요'); switchTab('settings'); return false; }
-    const assignees = pickAssignees(text, tgt);
+    const tasks = planTasks(text, tgt);
+    const assignees = tasks.map(t=>t.who);
     const group = uid(), ts = Date.now();
-    assignees.forEach(who=>{
-      const id = 'local-'+uid();
-      localRows.push({ id, group, ts, who, text, status:'대기', result:'', doneAt:'', checked:false, _local:true });
+    tasks.forEach((t,i)=>{
+      localRows.push({ id:'local-'+uid(), group, ts, who:t.who, text:t.task, full:text, order:i+1, status:'대기', result:'', doneAt:'', checked:false, _local:true });
     });
     renderTimeline(true);
     try{
-      const json = await api('add', { group, text, assignees });
+      const json = await api('add', { group, text, tasks });
       applyRows(json.rows); setSync('ok');
       const manual = assignees.filter(n=>n!=='피클');
       if(manual.length) toast(`${manual.join('·')} 몫은 지시문을 복사해서 앱에 붙여 넣어 주세요`);
@@ -417,6 +440,17 @@
     rows.forEach(r=>{ if(ids.includes(r.id)) r.checked = value; }); renderTimeline(); renderStats();
     try{ const json = await api('check', { ids, value }); applyRows(json.rows); }
     catch(e){ toast('완료 표시를 저장하지 못했어요'); refresh(true); }
+  }
+
+  function buildHandoff(r){
+    const mates = rows.filter(x=>x.group===r.group && x.id!==r.id);
+    const done = mates.filter(x=>rowState(x)==='done');
+    const split = r.full && r.text.trim() !== r.full.trim();
+    let t = split ? `[네가 할 일]\n${r.text}\n\n[함께 하는 일 전체]\n${r.full}` : r.text;
+    if(done.length) t += `\n\n[다른 비서가 먼저 한 결과]\n` + done.map(x=>`- ${x.who}: ${x.result}`).join('\n');
+    const waiting = mates.filter(x=>rowState(x)==='pending' && (x.order||1) < (r.order||1));
+    if(waiting.length) t += `\n\n(참고: ${waiting.map(x=>x.who).join('·')}의 결과가 아직 없어요)`;
+    return t + `\n\n결과는 핵심만 2~3줄로 정리해서 알려 줘.`;
   }
 
   /* ───────── 렌더링: 고정 영역 ───────── */
@@ -455,8 +489,8 @@
     const tl = $('#timeline');
     const list = visibleRows();
     const groups = [], byId = {};
-    list.sort((a,b)=>a.ts-b.ts).forEach(r=>{
-      if(!byId[r.group]){ byId[r.group] = { group:r.group, ts:r.ts, text:r.text, rows:[] }; groups.push(byId[r.group]); }
+    list.sort((a,b)=>(a.ts-b.ts) || ((a.order||1)-(b.order||1))).forEach(r=>{
+      if(!byId[r.group]){ byId[r.group] = { group:r.group, ts:r.ts, text:r.full || r.text, rows:[] }; groups.push(byId[r.group]); }
       byId[r.group].rows.push(r);
     });
     const doneN = list.filter(r=>r.checked).length;
@@ -527,6 +561,8 @@
       msg = r._local ? '시트에 기록하는 중이에요…' : `${esc(a.id)} 앱에 지시를 전달해 주세요. 받은 결과를 붙여 넣으면 시트에 기록돼요.`;
       if(!r._local) actions = `<button class="btn-sm" data-copy-row="${r.id}">${esc(a.id)}에게 보낼 지시문 복사</button><button class="btn-sm" data-open="${r.id}">결과 붙여넣기</button>`;
     }
+    const split = r.full && r.text && r.text.trim() !== r.full.trim();
+    if(split) msg = `<b style="color:${a.color}">맡은 일</b> ${highlight(r.text)}<br><span style="font-size:12.5px">${msg}</span>`;
     const box = openResult===r.id ? `
       <div class="result-box">
         <textarea id="res-${r.id}" placeholder="${esc(a.id)}에게 받은 결과를 붙여 넣어 주세요"></textarea>
@@ -566,14 +602,63 @@
 
   const input = $('#input'), sendBtn = $('#sendBtn');
   const autoGrow = ()=>{ input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,180)+'px'; };
-  input.addEventListener('input',()=>{ sendBtn.disabled = !input.value.trim(); autoGrow(); });
+  /* ── @이름 자동완성 + 넣기 버튼 ── */
+  const CHO = { 'ㅍ':'피클', 'ㅋ':'키링', 'ㅂ':'부이' };
+  function currentWord(){
+    const pos = input.selectionStart, before = input.value.slice(0, pos);
+    const m = before.match(/(^|[\s,.·])(@?[가-힣ㄱ-ㅎA-Za-z]{0,4})$/);
+    if(!m || !m[2]) return null;
+    return { w:m[2], start:pos - m[2].length, end:pos };
+  }
+  function suggestions(){
+    const cw = currentWord(); if(!cw) return null;
+    const raw = cw.w.replace(/^@/, '');
+    let list;
+    if(!raw) list = AIS.map(a=>a.id);                       // '@'만 쳤을 때
+    else if(CHO[raw]) list = [CHO[raw]];                     // ㅍ·ㅋ·ㅂ 초성
+    else list = AIS.map(a=>a.id).filter(n=>n.startsWith(raw) && cw.w !== '@'+n);
+    return list.length ? { cw, list } : null;
+  }
+  function renderMentionBar(){
+    const sg = suggestions();
+    $('#mentionBar').innerHTML =
+      `<span class="lbl${sg?' on':''}">${sg?'누르면 바꿔요':'넣기'}</span>` +
+      AIS.map(a=>{
+        const cls = sg ? (sg.list.includes(a.id) ? ' suggest' : ' dim') : '';
+        return `<button type="button" class="mbtn${cls}" data-mention="${a.id}" style="--m:${a.color};--m-bg:${a.bg}">@${a.id}</button>`;
+      }).join('');
+  }
+  function insertMention(name){
+    const sg = suggestions();
+    let v = input.value, start, end, piece;
+    if(sg && sg.list.includes(name)){
+      start = sg.cw.start; end = sg.cw.end; piece = '@'+name+' ';
+    }else{
+      start = input.selectionStart; end = input.selectionEnd;
+      const before = v.slice(0, start);
+      piece = (before && !/\s$/.test(before) ? '\n' : '') + '@'+name+' ';
+    }
+    input.value = v.slice(0, start) + piece + v.slice(end);
+    const caret = start + piece.length;
+    input.focus(); input.setSelectionRange(caret, caret);
+    sendBtn.disabled = !input.value.trim(); autoGrow(); renderMentionBar();
+  }
+  $('#mentionBar').addEventListener('mousedown', e=>{ if(e.target.closest('[data-mention]')) e.preventDefault(); }); // 포커스 유지
+  $('#mentionBar').addEventListener('click', e=>{ const b = e.target.closest('[data-mention]'); if(b) insertMention(b.dataset.mention); });
+  ['keyup','click','select','focus'].forEach(ev=>input.addEventListener(ev, renderMentionBar));
+
+  input.addEventListener('input',()=>{ sendBtn.disabled = !input.value.trim(); autoGrow(); renderMentionBar(); });
   input.addEventListener('keydown',e=>{
+    if(e.key==='Tab' && !e.isComposing){
+      const sg = suggestions();
+      if(sg){ e.preventDefault(); insertMention(sg.list[0]); return; }
+    }
     if(e.key==='Enter' && !e.shiftKey && !e.isComposing && e.keyCode!==229){ e.preventDefault(); submit(); }
   });
   sendBtn.addEventListener('click',submit);
   async function submit(){
     const v = input.value; if(!v.trim()) return;
-    input.value=''; sendBtn.disabled=true; autoGrow();
+    input.value=''; sendBtn.disabled=true; autoGrow(); renderMentionBar();
     const ok = await send(v, target);
     if(!ok && !input.value){ input.value = v; sendBtn.disabled = false; autoGrow(); }
   }
@@ -584,7 +669,7 @@
     if(el.dataset.ex!==undefined){ const ex = EXAMPLES[+el.dataset.ex]; setTarget(ex.target); send(ex.text, ex.target); }
     else if(el.dataset.check!==undefined){ setChecked(el.dataset.check.split(','), el.dataset.val==='true'); }
     else if(el.dataset.copyPickle!==undefined){ copy(PICKLE_PROMPT); }
-    else if(el.dataset.copyRow!==undefined){ const r = rows.find(x=>x.id===el.dataset.copyRow); if(r) copy(`${r.text}\n\n(결과는 핵심만 2~3줄로 정리해서 알려 줘)`); }
+    else if(el.dataset.copyRow!==undefined){ const r = rows.find(x=>x.id===el.dataset.copyRow); if(r) copy(buildHandoff(r)); }
     else if(el.dataset.open!==undefined){
       openResult = el.dataset.open || null; renderTimeline();
       if(openResult) setTimeout(()=>{ const t = document.getElementById('res-'+openResult); if(t) t.focus(); },30);
@@ -631,7 +716,7 @@
   rows = store.get(LS.cache, []);
   cutoff = store.get(LS.cut, 0);
   $('#cfgUrl').value = cfg.url || ''; $('#cfgToken').value = cfg.token || '';
-  renderStatic(); renderChips(); renderTimeline(); renderStats(); setSync('off');
+  renderStatic(); renderChips(); renderMentionBar(); renderTimeline(); renderStats(); setSync('off');
   if(cfg.url && cfg.token){ refresh(); startPolling(); }
 })();
 </script>
