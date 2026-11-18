@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<meta name="referrer" content="no-referrer">
+<title>AI들이 일을 이어 가고 있어요</title>
+<style>
+  :root{
+    --bg:#f4f5f8; --card:#fff; --line:#e6e8ee; --text:#1c1f26; --sub:#6b7280; --faint:#9aa1ad;
+    --me:#2f6bff; --radius:18px;
+    --shadow:0 1px 2px rgba(16,24,40,.04),0 4px 14px rgba(16,24,40,.06);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;background:var(--bg);color:var(--text);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+  button,textarea,input{font:inherit;color:inherit}
+  button{cursor:pointer;border:0;background:none}
+  .app{max-width:520px;margin:0 auto;min-height:100%;display:flex;flex-direction:column}
+
+  header{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:saturate(1.6) blur(10px);-webkit-backdrop-filter:saturate(1.6) blur(10px);border-bottom:1px solid var(--line);padding:calc(14px + env(safe-area-inset-top)) 16px 0}
+  .head-row{display:flex;align-items:center;gap:12px}
+  .head-title{flex:1;min-width:0}
+  .head-title h1{font-size:18px;font-weight:800;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .badges{display:flex;gap:6px;margin-top:4px;flex-wrap:wrap}
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:#3b4252;background:#eef1f6;border-radius:999px;padding:3px 9px}
+  .badge .dot{width:7px;height:7px;border-radius:50%;background:#22c55e}
+  .badge.off .dot{background:#f59e0b}
+  .badge.err .dot{background:#ef4444}
+  .stack{display:flex;flex-shrink:0;padding-left:10px}
+  .stack .av{margin-left:-10px;border:2px solid #fff;width:34px;height:34px;font-size:16px}
+  .av{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-size:18px;flex-shrink:0;user-select:none}
+
+  .tabs{display:flex;gap:4px;margin-top:12px}
+  .tab{flex:1;padding:11px 0 12px;font-size:14px;font-weight:700;color:var(--faint);border-bottom:2.5px solid transparent}
+  .tab[aria-selected="true"]{color:var(--text);border-color:var(--text)}
+
+  main{flex:1;padding:14px 14px calc(28px + env(safe-area-inset-bottom))}
+  .panel{display:none}
+  .panel.on{display:block;animation:fade .18s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px}
+  .card + .card{margin-top:12px}
+  .card-title{font-size:15px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .card-title small{font-size:12px;color:var(--faint);font-weight:600;text-align:right}
+
+  .chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;margin-bottom:10px;scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex-shrink:0;display:inline-flex;align-items:center;gap:4px;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:700;background:#f1f3f7;color:#4b5563;border:1.5px solid transparent}
+  .chip[aria-pressed="true"]{background:var(--c-bg,#1c1f26);color:var(--c,#fff);border-color:var(--c,#1c1f26)}
+  .chip.all[aria-pressed="true"]{background:#1c1f26;color:#fff;border-color:#1c1f26}
+  textarea,input[type=text],input[type=password],input[type=url]{width:100%;border:1.5px solid var(--line);border-radius:14px;padding:11px 13px;background:#fafbfc;outline:none}
+  textarea{min-height:76px;max-height:180px;resize:none}
+  textarea:focus,input:focus{border-color:#9db6ff;background:#fff;box-shadow:0 0 0 4px rgba(47,107,255,.10)}
+  .foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
+  .hint{font-size:12px;color:var(--faint)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 18px;border-radius:12px;font-weight:800;font-size:14px}
+  .btn:active{transform:scale(.97)}
+  .btn-primary{background:var(--me);color:#fff}
+  .btn-primary:disabled{background:#c7d2e8;cursor:not-allowed}
+  .btn-line{background:#fff;border:1.5px solid var(--line)}
+  .btn-danger{background:#fff1f1;color:#d92d20;border:1.5px solid #ffd5d2}
+  .btn-sm{padding:5px 10px;font-size:12px;border-radius:999px;font-weight:700}
+  .btn-full{width:100%}
+
+  .tl-head{display:flex;align-items:center;justify-content:space-between;margin:20px 4px 8px}
+  .tl-head h2{font-size:14px;font-weight:800;color:#3b4252}
+  .tl-head span{font-size:12px;color:var(--faint);font-weight:600}
+  .timeline{display:flex;flex-direction:column;gap:12px}
+  .daysep{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:12px;font-weight:700;margin:6px 0}
+  .daysep::before,.daysep::after{content:"";flex:1;height:1px;background:var(--line)}
+
+  .msg{display:flex;gap:8px;align-items:flex-start;animation:pop .22s ease}
+  @keyframes pop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .msg.me{flex-direction:row-reverse}
+  .msg-body{max-width:82%;display:flex;flex-direction:column;min-width:0}
+  .msg.me .msg-body{align-items:flex-end}
+  .who{font-size:12px;font-weight:800;margin:0 4px 3px}
+  .who em{font-style:normal;font-weight:600;color:var(--faint);margin-left:4px}
+  .bubble{padding:10px 13px;border-radius:16px;white-space:pre-wrap;word-break:break-word;font-size:14.5px}
+  .msg.ai .bubble{background:#fff;border-top-left-radius:5px;box-shadow:var(--shadow);border-left:3px solid var(--c)}
+  .msg.me .bubble{background:var(--me);color:#fff;border-top-right-radius:5px}
+  .msg.pending .bubble{background:#fbfbfd;border-left-style:dashed;color:var(--sub);font-size:13.5px}
+  .msg.error .bubble{background:#fff7f6;border-left-color:#ef4444;color:#b42318;font-size:13.5px}
+  .msg.done .bubble{opacity:.55}
+  .msg.done .bubble .txt{text-decoration:line-through;text-decoration-thickness:1px}
+  .mention{font-weight:800;border-radius:6px;padding:0 3px;background:var(--m-bg);color:var(--m)}
+  .msg.me .mention{background:rgba(255,255,255,.22);color:#fff}
+  .meta{display:flex;align-items:center;gap:6px;margin:4px 4px 0;font-size:11.5px;color:var(--faint);flex-wrap:wrap}
+  .msg.me .meta{justify-content:flex-end}
+  .done-btn{font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:#fff;color:#6b7280}
+  .done-btn[aria-pressed="true"]{background:#ecfdf3;border-color:#abefc6;color:#067647}
+  .act{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .act .btn-sm{background:#fff;border:1px solid var(--line);color:#3b4252}
+  .result-box{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+  .result-box textarea{min-height:64px;font-size:14px;background:#fff}
+  .result-box .row{display:flex;gap:6px;justify-content:flex-end}
+  .dots{display:inline-flex;gap:3px;margin-left:6px;vertical-align:middle}
+  .dots i{width:5px;height:5px;border-radius:50%;background:#b8bec9;animation:blink 1.2s infinite}
+  .dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+  @keyframes blink{0%,60%,100%{opacity:.3}30%{opacity:1}}
+
+  .empty{text-align:center;padding:26px 8px 8px}
+  .empty .big{font-size:34px;margin-bottom:6px}
+  .empty p{color:var(--sub);font-size:14px;margin-bottom:14px}
+  .examples{display:flex;flex-direction:column;gap:8px;text-align:left}
+  .ex{background:#fff;border:1.5px dashed #d4d9e3;border-radius:14px;padding:12px 14px;font-size:14px;font-weight:600;display:flex;gap:10px;align-items:center}
+  .ex:hover{border-color:#9db6ff;background:#f7f9ff}
+  .ex b{font-size:11px;font-weight:800;padding:2px 7px;border-radius:999px;background:#eef1f6;color:#4b5563;flex-shrink:0}
+
+  .member{display:flex;gap:12px;align-items:flex-start}
+  .member .av{width:48px;height:48px;font-size:24px}
+  .member-info{flex:1;min-width:0}
+  .member-info h3{font-size:16px;font-weight:800}
+  .role{display:inline-block;font-size:12px;font-weight:800;border-radius:999px;padding:2px 8px;margin:3px 0 6px}
+  .member-info p{font-size:13.5px;color:var(--sub)}
+  .how{margin-top:8px;font-size:12.5px;background:#f6f7fa;border-radius:10px;padding:8px 10px;color:#4b5563}
+  .member-btns{display:flex;gap:8px;margin-top:12px}
+  .member-btns .btn{flex:1}
+
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
+  .field small{display:block;font-size:12px;color:var(--faint);margin-top:4px}
+  .status{display:flex;gap:12px;align-items:center}
+  .status-icon{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:20px;background:#ecfdf3;flex-shrink:0}
+  .status-icon.off{background:#fffaeb}.status-icon.err{background:#fff1f1}
+  .status h3{font-size:15px;font-weight:800}
+  .status p{font-size:13px;color:var(--sub)}
+  .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+  .stat{background:#f6f7fa;border-radius:12px;padding:10px;text-align:center}
+  .stat b{display:block;font-size:18px;font-weight:800}
+  .stat span{font-size:12px;color:var(--sub)}
+  .desc{font-size:13px;color:var(--sub);margin:-4px 0 12px}
+  .btn-row{display:flex;gap:8px}
+  .btn-row .btn{flex:1}
+  .guide{font-size:13px;color:#3b4252;padding-left:18px}
+  .guide li{margin-bottom:4px}
+
+  .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translate(-50%,20px);background:#1c1f26;color:#fff;font-size:13.5px;font-weight:600;padding:10px 16px;border-radius:12px;opacity:0;pointer-events:none;transition:.2s;z-index:50;max-width:90vw;text-align:center}
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="head-row">
+      <div class="head-title">
+        <h1>AI들이 일을 이어 가고 있어요</h1>
+        <div class="badges">
+          <span class="badge">AI 3개가 함께해요</span>
+          <span class="badge off" id="syncBadge"><span class="dot"></span><span id="syncText">시트 미연결</span></span>
+        </div>
+      </div>
+      <div class="stack" id="avatarStack" aria-hidden="true"></div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="chat" aria-selected="true">대화·결정</button>
+      <button class="tab" role="tab" data-tab="members" aria-selected="false">멤버·AI</button>
+      <button class="tab" role="tab" data-tab="settings" aria-selected="false">설정</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- 대화·결정 -->
+    <section class="panel on" id="panel-chat">
+      <div class="card" id="composer">
+        <div class="card-title">AI에게 시킬 일 <small id="targetLabel"></small></div>
+        <div class="chips" id="chips"></div>
+        <textarea id="input" maxlength="1000" placeholder="시킬 일을 적어 주세요"></textarea>
+        <div class="foot">
+          <span class="hint">Enter 보내기 · Shift+Enter 줄바꿈</span>
+          <button class="btn btn-primary" id="sendBtn" disabled>지시 남기기</button>
+        </div>
+      </div>
+      <div class="tl-head"><h2>타임라인</h2><span id="doneCount"></span></div>
+      <div class="timeline" id="timeline"></div>
+    </section>
+
+    <!-- 멤버·AI -->
+    <section class="panel" id="panel-members"><div id="members"></div></section>
+
+    <!-- 설정 -->
+    <section class="panel" id="panel-settings">
+      <div class="card">
+        <div class="status">
+          <div class="status-icon off" id="statusIcon">🔌</div>
+          <div><h3 id="statusTitle">구글 시트 미연결</h3><p id="statusDesc">아래에 웹 앱 URL과 접속 암호를 넣어 주세요</p></div>
+        </div>
+        <div class="stat-grid">
+          <div class="stat"><b id="statCmd">0</b><span>내 지시</span></div>
+          <div class="stat"><b id="statWait">0</b><span>대기 중</span></div>
+          <div class="stat"><b id="statDone">0</b><span>완료</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">구글 시트 연결</div>
+        <div class="field">
+          <label for="cfgUrl">Apps Script 웹 앱 URL</label>
+          <input type="url" id="cfgUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="cfgToken">접속 암호 (TOKEN)</label>
+          <input type="password" id="cfgToken" placeholder="setup 실행 로그에 나온 값" autocomplete="off">
+          <small>URL과 암호는 이 기기 브라우저에만 저장돼요. 파일 안에는 들어가지 않아요.</small>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="saveCfg">저장하고 연결</button>
+          <button class="btn btn-line" id="syncNow">지금 새로고침</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">처음 연결하는 순서</div>
+        <ol class="guide">
+          <li>이 용도 전용 구글 계정에서 새 시트 "AI비서 협업" 만들기</li>
+          <li>확장 프로그램 → Apps Script에 Code.gs 붙여넣기</li>
+          <li><b>setup</b> 실행 → 로그의 TOKEN 메모</li>
+                    <li>배포 → 웹 앱 (실행: 나 / 액세스: 모든 사용자)</li>
+          <li>URL·TOKEN을 위 칸에 넣고 저장</li>
+          <li>피클에 같은 구글 계정을 연결</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <div class="card-title">대화 내역 내보내기</div>
+        <p class="desc">시트에서 불러온 지시와 결과를 JSON 파일로 내려받아요.</p>
+        <button class="btn btn-line btn-full" id="exportBtn">JSON으로 내보내기</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">화면 정리</div>
+        <p class="desc">이 기기 화면에서만 지금까지의 대화를 숨겨요. 시트 기록은 그대로 남아요.</p>
+        <div class="btn-row">
+          <button class="btn btn-danger" id="resetBtn">대화 초기화</button>
+          <button class="btn btn-line" id="unhideBtn">숨긴 대화 다시 보기</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ───────── 멤버 (id = 시트의 '담당' 값) ───────── */
+  const AIS = [
+    { id:'피클', emoji:'🥒', role:'실행·전화·예약', color:'#15803d', bg:'#dcfce7',
+      desc:'예약, 전화 문의, 신청·주문처럼 실제로 손이 가는 일을 처리해요.',
+      how:'구글 드라이브로 시트를 직접 읽고 결과를 적어요. 피클 앱에서 "작업 시트 확인해"라고 한 번 불러 주세요.',
+      kw:['예약','전화','주문','신청','결제','배달','문의','취소','연락','접수','발급','예매','잡아'] },
+    { id:'키링', emoji:'🔑', role:'일정·정리·생활 챙기기', color:'#b45309', bg:'#fef3c7',
+      desc:'약속·일정 조율, 할 일 정리, 리뷰 적립금이나 구독 해지처럼 놓치기 쉬운 생활 일을 챙겨요.',
+      how:'시트 연결이 확인되지 않아서, 지시문을 복사해 키링 앱에 붙여 넣고 받은 결과를 다시 붙여 넣어요.',
+      kw:['일정','정리','약속','스케줄','할일','할 일','목록','리뷰','적립금','포인트','구독','해지','알림','마감','언제','챙겨'] },
+    { id:'부이', emoji:'🛟', role:'맛집·예약·쇼핑 비교', color:'#6d28d9', bg:'#ede9fe',
+      desc:'식당·쇼핑·여행 후보를 비교하고 취향에 맞게 골라 줘요.',
+      how:'시트 연결이 확인되지 않아서, 지시문을 복사해 부이 앱에 붙여 넣고 받은 결과를 다시 붙여 넣어요.',
+      kw:['비교','추천','맛집','식당','쇼핑','최저가','장보기','취향','골라','뭐가','항공','숙소','택시','외식','vs'] }
+  ];
+  const AI = Object.fromEntries(AIS.map(a=>[a.id,a]));
+  const MENTION_RE = /@(피클|키링|부이|모두)/g;
+
+  const PICKLE_PROMPT =
+`구글 드라이브의 "AI비서 협업" 시트에서 "AI협업" 탭을 열어 줘.
+'담당'이 피클이고 '상태'가 대기인 줄을 위에서부터 하나씩 처리해 줘.
+한 줄을 끝낼 때마다 그 줄의 '상태'를 완료로, '결과'에 무엇을 했는지 1~3줄로, '처리시각'에 지금 시각을 적어 줘.
+결제·예약 확정·외부 전화 전에는 반드시 나에게 먼저 확인받아 줘.
+다른 줄과 다른 탭은 수정하지 말아 줘.`;
+
+  const EXAMPLES = [
+    { target:'all',    text:'다음 주 토요일 저녁 가족 외식할 곳 비교해 보고 예약까지 해 줘' },
+    { target:'부이',    text:'무선 이어폰 3종 최저가랑 장단점 비교해 줘' },
+    { target:'키링',    text:'이번 달 주말 약속이랑 할 일 정리해 줘' }
+  ];
+
+  /* ───────── 상태 ───────── */
+  const LS = { cfg:'aiTeam.cfg.v1', cache:'aiTeam.cache.v1', cut:'aiTeam.cutoff.v1' };
+  let cfg = { url:'', token:'' };
+  let rows = [];               // 시트 줄
+  let localRows = [];          // 보내는 중(아직 시트 응답 전)
+  let cutoff = 0;
+  let target = 'all';
+  let sync = { state:'off', at:null, error:'' };   // off | ok | err | busy
+  let openResult = null;       // 결과 입력창이 열린 줄 id
+  let pollTimer = null;
+
+  const store = {
+    get(k,d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+    set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  };
+
+  /* ───────── 유틸 ───────── */
+  const $ = s=>document.querySelector(s);
+  const uid = ()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  const esc = s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function fmtTime(ts){
+    if(!ts || typeof ts !== 'number') return ts ? esc(ts) : '';
+    const d = new Date(ts); let h = d.getHours();
+    const ap = h<12?'오전':'오후'; h = h%12||12;
+    return `${ap} ${h}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }
+  const dayKey = ts=>{ const d=new Date(ts); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
+  function fmtDay(ts){
+    const d = new Date(ts), now = new Date();
+    const label = `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 ${'일월화수목금토'[d.getDay()]}요일`;
+    if(dayKey(ts)===dayKey(now)) return `오늘 · ${label}`;
+    const y = new Date(now); y.setDate(now.getDate()-1);
+    return dayKey(ts)===dayKey(y) ? `어제 · ${label}` : label;
+  }
+  function highlight(text){
+    return esc(text).replace(MENTION_RE,(m,n)=>{
+      const a = AI[n];
+      return a ? `<span class="mention" style="--m:${a.color};--m-bg:${a.bg}">${m}</span>`
+               : `<span class="mention" style="--m:#1c1f26;--m-bg:#eef1f6">${m}</span>`;
+    });
+  }
+  function toast(msg){
+    const el = $('#toast'); el.textContent = msg; el.classList.add('show');
+    clearTimeout(toast._t); toast._t = setTimeout(()=>el.classList.remove('show'),2000);
+  }
+  async function copy(text){
+    try{ await navigator.clipboard.writeText(text); }
+    catch(e){
+      const t = document.createElement('textarea'); t.value = text; t.style.position='fixed'; t.style.opacity='0';
+      document.body.appendChild(t); t.select(); try{ document.execCommand('copy'); }catch(_){} t.remove();
+    }
+    toast('복사했어요');
+  }
+  const rowState = r => r.status==='오류' ? 'error' : ((r.result && r.result.trim()) || /완료/.test(r.status)) ? 'done' : 'pending';
+
+  /* ───────── 시트 통신 ───────── */
+  async function api(action, data){
+    const res = await fetch(cfg.url, { method:'POST', body: JSON.stringify(Object.assign({ token:cfg.token, action }, data)) });
+    const json = await res.json();
+    if(!json.ok) throw new Error(json.error || '요청 실패');
+    return json;
+  }
+  async function refresh(silent){
+    if(!cfg.url || !cfg.token){ setSync('off'); return; }
+    if(!silent) setSync('busy');
+    try{
+      const res = await fetch(cfg.url + '?token=' + encodeURIComponent(cfg.token));
+      const json = await res.json();
+      if(!json.ok) throw new Error(json.error || '불러오기 실패');
+      applyRows(json.rows);
+      setSync('ok');
+    }catch(e){ setSync('err', e.message || '연결 실패'); }
+  }
+  function applyRows(list){
+    rows = Array.isArray(list) ? list : [];
+    const known = new Set(rows.map(r=>r.group));
+    localRows = localRows.filter(r=>!known.has(r.group));
+    store.set(LS.cache, rows);
+    renderTimeline(); renderStats();
+  }
+  function setSync(state, error){
+    sync.state = state; sync.error = error || '';
+    if(state==='ok') sync.at = Date.now();
+    const badge = $('#syncBadge'), text = $('#syncText');
+    badge.classList.toggle('off', state==='off' || state==='busy');
+    badge.classList.toggle('err', state==='err');
+    text.textContent = state==='off' ? '시트 미연결' : state==='err' ? '연결 오류' : state==='busy' ? '동기화 중…' : `동기화 ${fmtTime(sync.at)}`;
+    renderSettings();
+  }
+  function startPolling(){
+    clearInterval(pollTimer);
+    pollTimer = setInterval(()=>{ if(document.visibilityState==='visible') refresh(true); }, 15000);
+  }
+
+  /* ───────── 담당 고르기 ───────── */
+  function pickAssignees(text, tgt){
+    if(tgt !== 'all') return [tgt];
+    const named = []; let m; MENTION_RE.lastIndex = 0;
+    while((m = MENTION_RE.exec(text))){ if(AI[m[1]] && !named.includes(m[1])) named.push(m[1]); }
+    if(named.length) return named;
+    const hit = AIS.filter(a=>a.kw.some(k=>text.toLowerCase().includes(k)));
+    return (hit.length ? hit : AIS).map(a=>a.id);
+  }
+
+  /* ───────── 보내기 ───────── */
+  async function send(text, tgt){
+    text = (text||'').trim();
+    if(!text) return false;
+    if(!cfg.url || !cfg.token){ toast('먼저 설정 탭에서 구글 시트를 연결해 주세요'); switchTab('settings'); return false; }
+    const assignees = pickAssignees(text, tgt);
+    const group = uid(), ts = Date.now();
+    assignees.forEach(who=>{
+      const id = 'local-'+uid();
+      localRows.push({ id, group, ts, who, text, status:'대기', result:'', doneAt:'', checked:false, _local:true });
+    });
+    renderTimeline(true);
+    try{
+      const json = await api('add', { group, text, assignees });
+      applyRows(json.rows); setSync('ok');
+      const manual = assignees.filter(n=>n!=='피클');
+      if(manual.length) toast(`${manual.join('·')} 몫은 지시문을 복사해서 앱에 붙여 넣어 주세요`);
+      return true;
+    }catch(e){
+      localRows = localRows.filter(r=>r.group!==group);
+      renderTimeline();
+      setSync('err', e.message);
+      toast('시트에 기록하지 못했어요: ' + e.message);
+      return false;
+    }
+  }
+
+  async function saveResult(id, text){
+    text = (text||'').trim(); if(!text) return;
+    try{ const json = await api('result', { id, result:text }); openResult = null; applyRows(json.rows); toast('결과를 시트에 적었어요'); }
+    catch(e){ toast('저장하지 못했어요: ' + e.message); }
+  }
+  async function setChecked(ids, value){
+    rows.forEach(r=>{ if(ids.includes(r.id)) r.checked = value; }); renderTimeline(); renderStats();
+    try{ const json = await api('check', { ids, value }); applyRows(json.rows); }
+    catch(e){ toast('완료 표시를 저장하지 못했어요'); refresh(true); }
+  }
+
+  /* ───────── 렌더링: 고정 영역 ───────── */
+  function renderStatic(){
+    $('#avatarStack').innerHTML = AIS.map(a=>`<div class="av" style="background:${a.bg}" title="${a.id}">${a.emoji}</div>`).join('');
+    $('#members').innerHTML = AIS.map(a=>`
+      <div class="card">
+        <div class="member">
+          <div class="av" style="background:${a.bg}">${a.emoji}</div>
+          <div class="member-info">
+            <h3 style="color:${a.color}">${a.id}</h3>
+            <span class="role" style="background:${a.bg};color:${a.color}">${a.role}</span>
+            <p>${a.desc}</p>
+            <div class="how">${a.how}</div>
+          </div>
+        </div>
+        <div class="member-btns">
+          <button class="btn btn-line" data-talk="${a.id}" style="color:${a.color}">${a.id}에게 말 걸기</button>
+          ${a.id==='피클' ? `<button class="btn btn-line" data-copy-pickle>피클 지시문 복사</button>` : ''}
+        </div>
+      </div>`).join('');
+  }
+  function renderChips(){
+    $('#chips').innerHTML =
+      `<button class="chip all" data-target="all" aria-pressed="${target==='all'}">👥 모두에게</button>` +
+      AIS.map(a=>`<button class="chip" data-target="${a.id}" aria-pressed="${target===a.id}" style="--c:${a.color};--c-bg:${a.bg}">${a.emoji} ${a.id}</button>`).join('');
+    $('#targetLabel').textContent = target==='all' ? '주제에 맞는 AI에게 나눠 줘요' : `${target} · ${AI[target].role}`;
+    $('#input').placeholder = target==='all' ? '모두에게 시킬 일을 적어 주세요' : `${target}에게 시킬 일을 적어 주세요`;
+  }
+  function setTarget(t){ target = t; renderChips(); }
+
+  /* ───────── 렌더링: 타임라인 ───────── */
+  function visibleRows(){ return rows.concat(localRows).filter(r=>r.ts >= cutoff); }
+
+  function renderTimeline(scroll){
+    const tl = $('#timeline');
+    const list = visibleRows();
+    const groups = [], byId = {};
+    list.sort((a,b)=>a.ts-b.ts).forEach(r=>{
+      if(!byId[r.group]){ byId[r.group] = { group:r.group, ts:r.ts, text:r.text, rows:[] }; groups.push(byId[r.group]); }
+      byId[r.group].rows.push(r);
+    });
+    const doneN = list.filter(r=>r.checked).length;
+    $('#doneCount').textContent = list.length ? `완료 ${doneN} / ${list.length}` : '';
+
+    if(!groups.length){
+      tl.innerHTML = (!cfg.url || !cfg.token)
+        ? `<div class="empty"><div class="big">🔌</div><p>구글 시트를 연결하면 지시가 시트에 기록되고<br>AI들의 결과가 여기에 떠요.</p>
+             <button class="btn btn-primary" data-goto="settings">시트 연결하러 가기</button></div>`
+        : `<div class="empty"><div class="big">✨</div><p>아직 지시가 없어요. 예시를 눌러 바로 시험해 보세요.</p>
+             <div class="examples">${EXAMPLES.map((e,i)=>`<button class="ex" data-ex="${i}"><b>${e.target==='all'?'모두에게':e.target}</b>${esc(e.text)}</button>`).join('')}</div></div>`;
+      return;
+    }
+
+    let html = '', lastDay = null;
+    for(const g of groups){
+      const dk = dayKey(g.ts);
+      if(dk !== lastDay){ html += `<div class="daysep">${fmtDay(g.ts)}</div>`; lastDay = dk; }
+      const allChecked = g.rows.every(r=>r.checked);
+      const ids = g.rows.filter(r=>!r._local).map(r=>r.id).join(',');
+      html += `
+        <div class="msg me${allChecked?' done':''}">
+          <div class="msg-body">
+            <div class="who" style="color:#3b4252">나 <em>→ ${g.rows.map(r=>r.who).join(', ')}</em></div>
+            <div class="bubble"><span class="txt">${highlight(g.text)}</span></div>
+            <div class="meta">${ids?`<button class="done-btn" data-check="${ids}" data-val="${!allChecked}" aria-pressed="${allChecked}">${allChecked?'✓ 완료됨':'완료 표시'}</button>`:''}<span>${g.rows[0]._local?'기록 중…':fmtTime(g.ts)}</span></div>
+          </div>
+        </div>`;
+      for(const r of g.rows) html += renderRow(r);
+    }
+    const draftEl = openResult && document.getElementById('res-'+openResult);
+    const draft = draftEl ? draftEl.value : '';
+    const hadFocus = draftEl && document.activeElement === draftEl;
+    tl.innerHTML = html;
+    if(draft || hadFocus){
+      const t = document.getElementById('res-'+openResult);
+      if(t){ t.value = draft; if(hadFocus) t.focus(); }
+    }
+    if(scroll) requestAnimationFrame(()=>{ const last = tl.lastElementChild; if(last) last.scrollIntoView({behavior:'smooth',block:'end'}); });
+  }
+
+  function renderRow(r){
+    const a = AI[r.who] || { id:r.who, emoji:'🤖', role:'', color:'#475467', bg:'#f2f4f7' };
+    const st = rowState(r);
+    const head = `<div class="who" style="color:${a.color}">${esc(a.id)}<em>${a.role}</em></div>`;
+    const av = `<div class="av" style="background:${a.bg}">${a.emoji}</div>`;
+
+    if(st==='done'){
+      return `<div class="msg ai${r.checked?' done':''}" style="--c:${a.color}">${av}
+        <div class="msg-body">${head}
+          <div class="bubble"><span class="txt">${highlight(r.result || '완료했어요')}</span></div>
+          <div class="meta"><span>${fmtTime(r.doneAt)}</span>
+            <button class="done-btn" data-check="${r.id}" data-val="${!r.checked}" aria-pressed="${r.checked}">${r.checked?'✓ 완료됨':'완료 표시'}</button></div>
+        </div></div>`;
+    }
+    if(st==='error'){
+      return `<div class="msg ai error" style="--c:${a.color}">${av}
+        <div class="msg-body">${head}
+          <div class="bubble">${esc(r.result || '처리 중 오류가 났어요')}</div>
+        </div></div>`;
+    }
+    // 대기
+    let msg, actions = '';
+    if(r.who==='피클'){
+      msg = '시트에 기록됐어요. 피클 앱에서 "작업 시트 확인해"라고 불러 주세요.';
+      if(!r._local) actions = `<button class="btn-sm" data-copy-pickle>피클 지시문 복사</button><button class="btn-sm" data-open="${r.id}">결과 직접 입력</button>`;
+    }else{
+      msg = r._local ? '시트에 기록하는 중이에요…' : `${esc(a.id)} 앱에 지시를 전달해 주세요. 받은 결과를 붙여 넣으면 시트에 기록돼요.`;
+      if(!r._local) actions = `<button class="btn-sm" data-copy-row="${r.id}">${esc(a.id)}에게 보낼 지시문 복사</button><button class="btn-sm" data-open="${r.id}">결과 붙여넣기</button>`;
+    }
+    const box = openResult===r.id ? `
+      <div class="result-box">
+        <textarea id="res-${r.id}" placeholder="${esc(a.id)}에게 받은 결과를 붙여 넣어 주세요"></textarea>
+        <div class="row"><button class="btn-sm" data-open="">취소</button><button class="btn-sm" style="background:var(--me);color:#fff;border-color:var(--me)" data-save="${r.id}">시트에 저장</button></div>
+      </div>` : '';
+    return `<div class="msg ai pending" style="--c:${a.color}">${av}
+      <div class="msg-body">${head}
+        <div class="bubble">${msg}</div>
+        ${actions?`<div class="act">${actions}</div>`:''}${box}
+      </div></div>`;
+  }
+
+  /* ───────── 렌더링: 설정·통계 ───────── */
+  function renderStats(){
+    const list = visibleRows();
+    $('#statCmd').textContent = new Set(list.map(r=>r.group)).size;
+    $('#statWait').textContent = list.filter(r=>rowState(r)==='pending').length;
+    $('#statDone').textContent = list.filter(r=>rowState(r)==='done').length;
+  }
+  function renderSettings(){
+    const icon = $('#statusIcon');
+    icon.className = 'status-icon' + (sync.state==='err' ? ' err' : sync.state==='off' ? ' off' : '');
+    if(sync.state==='off'){ icon.textContent='🔌'; $('#statusTitle').textContent='구글 시트 미연결'; $('#statusDesc').textContent='아래에 웹 앱 URL과 접속 암호를 넣어 주세요'; }
+    else if(sync.state==='err'){ icon.textContent='⚠️'; $('#statusTitle').textContent='연결에 문제가 있어요'; $('#statusDesc').textContent=sync.error || 'URL과 접속 암호를 확인해 주세요'; }
+    else if(sync.state==='busy'){ icon.textContent='🔄'; $('#statusTitle').textContent='동기화 중'; $('#statusDesc').textContent='구글 시트에서 불러오는 중이에요'; }
+    else { icon.textContent='✅'; $('#statusTitle').textContent='구글 시트에 자동 저장 중'; $('#statusDesc').textContent=`마지막 동기화 ${fmtTime(sync.at)} · 15초마다 새로 읽어요`; }
+  }
+
+  /* ───────── 이벤트 ───────── */
+  function switchTab(name){
+    document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected', t.dataset.tab===name));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on', p.id==='panel-'+name));
+    window.scrollTo({top:0});
+  }
+  document.querySelector('.tabs').addEventListener('click',e=>{ const t=e.target.closest('.tab'); if(t) switchTab(t.dataset.tab); });
+  $('#chips').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(c){ setTarget(c.dataset.target); $('#input').focus(); } });
+
+  const input = $('#input'), sendBtn = $('#sendBtn');
+  const autoGrow = ()=>{ input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,180)+'px'; };
+  input.addEventListener('input',()=>{ sendBtn.disabled = !input.value.trim(); autoGrow(); });
+  input.addEventListener('keydown',e=>{
+    if(e.key==='Enter' && !e.shiftKey && !e.isComposing && e.keyCode!==229){ e.preventDefault(); submit(); }
+  });
+  sendBtn.addEventListener('click',submit);
+  async function submit(){
+    const v = input.value; if(!v.trim()) return;
+    input.value=''; sendBtn.disabled=true; autoGrow();
+    const ok = await send(v, target);
+    if(!ok && !input.value){ input.value = v; sendBtn.disabled = false; autoGrow(); }
+  }
+
+  document.addEventListener('click',e=>{
+    const el = e.target.closest('[data-ex],[data-check],[data-copy-pickle],[data-copy-row],[data-open],[data-save],[data-goto],[data-talk]');
+    if(!el) return;
+    if(el.dataset.ex!==undefined){ const ex = EXAMPLES[+el.dataset.ex]; setTarget(ex.target); send(ex.text, ex.target); }
+    else if(el.dataset.check!==undefined){ setChecked(el.dataset.check.split(','), el.dataset.val==='true'); }
+    else if(el.dataset.copyPickle!==undefined){ copy(PICKLE_PROMPT); }
+    else if(el.dataset.copyRow!==undefined){ const r = rows.find(x=>x.id===el.dataset.copyRow); if(r) copy(`${r.text}\n\n(결과는 핵심만 2~3줄로 정리해서 알려 줘)`); }
+    else if(el.dataset.open!==undefined){
+      openResult = el.dataset.open || null; renderTimeline();
+      if(openResult) setTimeout(()=>{ const t = document.getElementById('res-'+openResult); if(t) t.focus(); },30);
+    }
+    else if(el.dataset.save!==undefined){ const t = document.getElementById('res-'+el.dataset.save); if(t) saveResult(el.dataset.save, t.value); }
+    else if(el.dataset.goto!==undefined){ switchTab(el.dataset.goto); }
+    else if(el.dataset.talk!==undefined){
+      setTarget(el.dataset.talk); switchTab('chat');
+      setTimeout(()=>{ $('#composer').scrollIntoView({behavior:'smooth',block:'start'}); input.focus(); },60);
+      toast(`${el.dataset.talk}에게 보낼 준비가 됐어요`);
+    }
+  });
+
+  $('#saveCfg').addEventListener('click',async ()=>{
+    const url = $('#cfgUrl').value.trim(), token = $('#cfgToken').value.trim();
+    if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(url)){ toast('URL은 https://script.google.com/macros/s/…/exec 형식이어야 해요'); return; }
+    if(!token){ toast('접속 암호를 넣어 주세요'); return; }
+    cfg = { url, token }; store.set(LS.cfg, cfg);
+    await refresh();
+    if(sync.state==='ok'){ toast('연결됐어요'); startPolling(); renderTimeline(); }
+  });
+  $('#syncNow').addEventListener('click',()=>refresh());
+
+  $('#exportBtn').addEventListener('click',()=>{
+    const data = { app:'AI 비서 협업 채팅방', exportedAt:new Date().toISOString(),
+      rows: rows.map(r=>Object.assign({}, r, { time: new Date(r.ts).toISOString() })) };
+    const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const url = URL.createObjectURL(blob), d = new Date(), p = n=>String(n).padStart(2,'0');
+    const a = document.createElement('a');
+    a.href = url; a.download = `ai-team-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.json`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+    toast('JSON 파일을 내려받았어요');
+  });
+  $('#resetBtn').addEventListener('click',()=>{
+    if(!confirm('이 기기 화면에서 지금까지의 대화를 숨길까요? 시트 기록은 남아요.')) return;
+    cutoff = Date.now(); store.set(LS.cut, cutoff); renderTimeline(); renderStats(); toast('화면을 정리했어요');
+  });
+  $('#unhideBtn').addEventListener('click',()=>{ cutoff = 0; store.set(LS.cut, 0); renderTimeline(); renderStats(); toast('숨긴 대화를 다시 보여 줘요'); });
+
+  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') refresh(true); });
+
+  /* ───────── 시작 ───────── */
+  cfg = store.get(LS.cfg, cfg);
+  rows = store.get(LS.cache, []);
+  cutoff = store.get(LS.cut, 0);
+  $('#cfgUrl').value = cfg.url || ''; $('#cfgToken').value = cfg.token || '';
+  renderStatic(); renderChips(); renderTimeline(); renderStats(); setSync('off');
+  if(cfg.url && cfg.token){ refresh(); startPolling(); }
+})();
+</script>
+</body>
+</html>
