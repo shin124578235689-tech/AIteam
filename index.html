@@ -220,6 +220,21 @@
   .mode-btn{flex:1;padding:10px 0;border-radius:12px;font-size:13px;font-weight:800;background:#f1f3f7;color:#4b5563;border:1.5px solid transparent}
   .mode-btn.on{background:#eef3ff;color:var(--me);border-color:var(--me)}
 
+  .fast-chip{font-size:12.5px;font-weight:800;padding:7px 11px;border-radius:999px;background:#f1f3f7;color:#6b7280;border:1.5px solid transparent;white-space:nowrap}
+  .fast-chip[aria-pressed="true"]{background:#fff7ed;color:#c2410c;border-color:#fdba74}
+  .fast-card{margin-top:12px;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:16px;padding:12px 14px;animation:pop .25s ease}
+  .fast-card .fc-head{display:flex;align-items:center;justify-content:space-between;font-size:13.5px;font-weight:800;color:#9a3412}
+  .fast-card .fc-head button{font-size:12px;color:#9a3412;font-weight:700}
+  .fast-card .fc-sub{font-size:12px;color:#9a3412;opacity:.8;margin:2px 0 8px}
+  .fc-row{display:flex;align-items:center;gap:8px;background:#fff;border-radius:12px;padding:7px 9px;margin-top:6px}
+  .fc-row .av{width:30px;height:30px;font-size:15px}
+  .fc-row .nm{flex:1;font-size:13px;font-weight:800;min-width:0}
+  .fc-row .nm small{display:block;font-size:11.5px;font-weight:600;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fc-row .st{font-size:11.5px;font-weight:800;color:var(--faint)}
+  .fc-row .st.ok{color:#067647}
+  .fc-row .btn-sm{background:#fff;border:1px solid var(--line);color:#3b4252}
+  .fc-row .btn-sm.ok{white-space:nowrap}
+
   .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translate(-50%,20px);background:#1c1f26;color:#fff;font-size:13.5px;font-weight:600;padding:10px 16px;border-radius:12px;opacity:0;pointer-events:none;transition:.2s;z-index:50;max-width:90vw;text-align:center}
   .toast.show{opacity:1;transform:translate(-50%,0)}
 </style>
@@ -255,9 +270,13 @@
         <div class="mention-bar" id="mentionBar"></div>
         <div class="foot">
           <span class="hint">Enter 보내기 · Tab 자동완성</span>
-          <button class="btn btn-primary" id="sendBtn" disabled>지시 남기기</button>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="fast-chip" id="fastBtn" aria-pressed="true" title="보내자마자 비서를 바로 부를 수 있게 해요">⚡ 바로</button>
+            <button class="btn btn-primary" id="sendBtn" disabled>지시 남기기</button>
+          </div>
         </div>
       </div>
+      <div id="fastSlot"></div>
       <div class="tl-head"><h2>타임라인</h2><div style="display:flex;gap:8px;align-items:center"><button class="mine-chip" id="mineChip" hidden></button><span id="doneCount"></span></div></div>
       <div class="timeline" id="timeline"></div>
     </section>
@@ -375,6 +394,8 @@
 
   // 비서 앱에는 AIteam 규칙이 이미 들어 있어서, 부를 때는 이 한 줄이면 돼요(토큰 절약)
   const CALL_PROMPT = 'AIteam 업무 탭 확인해 줘. (AIteam 공통 규칙대로)';
+  // 특정 줄을 바로 처리하게 할 때: id를 알려 주면 시트를 뒤지지 않아 빠르고 토큰도 아껴요
+  const callFor = r => (r && r.id && !r._local) ? `AIteam 업무 탭에서 id ${r.id} 줄을 지금 처리해 줘. (AIteam 공통 규칙대로)` : CALL_PROMPT;
 
   const EXAMPLES = [
     { target:'all',    text:'@부이 토요일 저녁 가족 외식할 곳 3곳 비교해 줘 @피클 부이가 고른 곳 예약해 줘 @키링 캘린더에 일정 넣어 줘' },
@@ -394,6 +415,8 @@
   let pollTimer = null;
   let mode = '모두승인';          // 설정 탭 B1 승인모드
   let onlyMine = false;          // '내 차례'만 보기
+  let fast = true;               // ⚡ 바로 — 보낸 뒤 부르기 카드 + 빠른 확인
+  let fastGroup = null, fastUntil = 0, fastTimer = null;
 
   const store = {
     get(k,d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
@@ -491,7 +514,7 @@
     const known = new Set(rows.map(r=>r.group));
     localRows = localRows.filter(r=>!known.has(r.group));
     store.set(LS.cache, rows);
-    renderTimeline(); renderStats();
+    renderTimeline(); renderStats(); renderFast();
   }
   function setSync(state, error){
     sync.state = state; sync.error = error || '';
@@ -522,12 +545,12 @@
         if(!part) return;
         byWho.set(mk.who, byWho.has(mk.who) ? byWho.get(mk.who) + '\n' + part : part);
       });
-      if(byWho.size) return [...byWho].map(([who,task])=>({ who, task }));
+      if(byWho.size) return [...byWho].map(([who,task],i)=>({ who, task, order:i+1 }));   // 나눠 쓴 일은 차례대로
     }
-    if(tgt !== 'all') return [{ who:tgt, task:text }];
+    if(tgt !== 'all') return [{ who:tgt, task:text, order:1 }];
     const lower = text.toLowerCase();
     const hit = AIS.filter(a=>a.kw.some(k=>lower.includes(k)));
-    return (hit.length ? hit : AIS).map(a=>({ who:a.id, task:text }));
+    return (hit.length ? hit : AIS).map(a=>({ who:a.id, task:text, order:1 }));     // 같은 지시는 동시에
   }
 
   /* ───────── 보내기 ───────── */
@@ -539,14 +562,13 @@
     const assignees = tasks.map(t=>t.who);
     const group = uid(), ts = Date.now();
     tasks.forEach((t,i)=>{
-      localRows.push({ id:'local-'+uid(), group, ts, who:t.who, text:t.task, full:text, order:i+1, status:'대기', result:'', doneAt:'', checked:false, _local:true });
+      localRows.push({ id:'local-'+uid(), group, ts, who:t.who, text:t.task, full:text, order:t.order||1, status:'대기', result:'', doneAt:'', checked:false, _local:true });
     });
     renderTimeline(true);
     try{
       const json = await api('add', { group, text, tasks });
       applyRows(json.rows); setSync('ok');
-      const manual = assignees.filter(n=>n!=='피클');
-      if(manual.length) toast(`${manual.join('·')} 몫은 지시문을 복사해서 앱에 붙여 넣어 주세요`);
+      if(fast) startFast(group); else toast('시트에 기록했어요. 비서들이 예약 시간에 처리해요');
       return true;
     }catch(e){
       localRows = localRows.filter(r=>r.group!==group);
@@ -562,6 +584,47 @@
     try{ const json = await api('result', { id, result:text }); openResult = null; applyRows(json.rows); toast('결과를 시트에 적었어요'); }
     catch(e){ toast('저장하지 못했어요: ' + e.message); }
   }
+  /* ── ⚡ 바로: 보낸 직후 비서 부르기 + 5초마다 확인 ── */
+  async function callAgent(r){
+    const text = callFor(r);
+    if(navigator.share){
+      try{ await navigator.share({ text }); toast(`${r.who} 앱을 골라 보내 주세요`); return; }
+      catch(e){ if(e && e.name === 'AbortError') return; }
+    }
+    copy(text);
+    toast(`복사했어요. ${r.who} 앱에 붙여 넣어 주세요`);
+  }
+  function startFast(group){
+    fastGroup = group; fastUntil = Date.now() + 5*60*1000;
+    clearInterval(fastTimer);
+    fastTimer = setInterval(async ()=>{
+      const left = rows.filter(r=>r.group===fastGroup && ['pending','working'].includes(rowState(r)));
+      if(Date.now() > fastUntil || !left.length){ clearInterval(fastTimer); fastTimer = null; renderFast(); return; }
+      if(document.visibilityState==='visible') await refresh(true);
+    }, 5000);
+    renderFast();
+  }
+  function renderFast(){
+    const slot = $('#fastSlot'); if(!slot) return;
+    if(!fastGroup){ slot.innerHTML = ''; return; }
+    const list = rows.filter(r=>r.group===fastGroup);
+    if(!list.length){ slot.innerHTML = ''; return; }
+    const allDone = list.every(r=>!['pending','working'].includes(rowState(r)));
+    slot.innerHTML = `<div class="fast-card">
+      <div class="fc-head"><span>${allDone ? '✅ 모두 답했어요' : '⚡ 지금 부르기'}</span><button data-fast-close>닫기</button></div>
+      <div class="fc-sub">${allDone ? '답장은 아래 타임라인에 있어요.' : (fastTimer ? '보내기를 누르면 공유창이 열려요. 앱을 고르면 바로 처리되고, 답은 5초 안에 떠요.' : '빠른 확인이 끝났어요. 답은 다음 새로고침 때 떠요.')}</div>
+      ${list.map(r=>{
+        const a = AI[r.who] || { emoji:'🤖', bg:'#f2f4f7' };
+        const st = rowState(r);
+        const label = st==='done' ? '<span class="st ok">✓ 답함</span>' : st==='working' ? '<span class="st">처리 중</span>'
+          : st==='approval' || st==='question' ? '<span class="st" style="color:#b45309">내 차례</span>' : '';
+        const btn = ['pending'].includes(st) ? `<button class="btn-sm ok" data-call="${r.id}">보내기</button>` : '';
+        return `<div class="fc-row"><div class="av" style="background:${a.bg}">${a.emoji}</div>
+          <div class="nm">${esc(r.who)}<small>${esc(r.text)}</small></div>${label}${btn}</div>`;
+      }).join('')}
+    </div>`;
+  }
+
   async function act(action, data, msg){
     try{ const json = await api(action, data); applyRows(json.rows); toast(msg); }
     catch(e){ toast('저장하지 못했어요: ' + e.message); }
@@ -726,7 +789,7 @@
       msg = '시트에 기록하는 중이에요…';
     }else{
       msg = `${esc(a.id)}${josaIGa(a.id)} AIteam을 확인하면 처리돼요. 급하면 ${esc(a.id)} 앱에서 불러 주세요.`;
-      actions = `<button class="btn-sm" data-copy-pickle>부르는 문구 복사</button><button class="btn-sm" data-open="${r.id}">결과 직접 입력</button>`;
+      actions = `<button class="btn-sm" data-call="${r.id}">지금 부르기</button><button class="btn-sm" data-open="${r.id}">결과 직접 입력</button>`;
     }
     const split = r.full && r.text && r.text.trim() !== r.full.trim();
     if(split) msg = `<b style="color:${a.color}">맡은 일</b> ${highlight(r.text)}<br><span style="font-size:12.5px">${msg}</span>`;
@@ -844,9 +907,11 @@
   }
 
   document.addEventListener('click',e=>{
-    const el = e.target.closest('[data-approve],[data-reject],[data-answer],[data-mode],[data-ex],[data-check],[data-copy-pickle],[data-copy-row],[data-open],[data-save],[data-goto],[data-talk]');
+    const el = e.target.closest('[data-call],[data-fast-close],[data-approve],[data-reject],[data-answer],[data-mode],[data-ex],[data-check],[data-copy-pickle],[data-copy-row],[data-open],[data-save],[data-goto],[data-talk]');
     if(!el) return;
-    if(el.dataset.approve!==undefined){ act('approve', { id:el.dataset.approve }, '승인했어요. 다음 실행 때 이어서 처리돼요'); }
+    if(el.dataset.call!==undefined){ const r = rows.find(x=>x.id===el.dataset.call); if(r) callAgent(r); }
+    else if(el.dataset.fastClose!==undefined){ fastGroup = null; clearInterval(fastTimer); fastTimer = null; renderFast(); }
+    else if(el.dataset.approve!==undefined){ act('approve', { id:el.dataset.approve }, '승인했어요. 다음 실행 때 이어서 처리돼요'); }
     else if(el.dataset.reject!==undefined){ if(confirm('이 일을 반려할까요? 같은 묶음은 더 진행되지 않아요.')) act('reject', { id:el.dataset.reject }, '반려했어요'); }
     else if(el.dataset.answer!==undefined){ const t = document.getElementById('res-q-'+el.dataset.answer); if(t && t.value.trim()){ openResult = null; act('answer', { id:el.dataset.answer, text:t.value.trim() }, '답을 보냈어요. 다시 대기로 돌아갔어요'); } }
     else if(el.dataset.mode!==undefined){ act('mode', { mode:el.dataset.mode }, `승인모드: ${el.dataset.mode}`); }
@@ -877,6 +942,11 @@
   });
   $('#syncNow').addEventListener('click',()=>refresh());
   $('#mineChip').addEventListener('click',()=>{ onlyMine = !onlyMine; renderTimeline(); });
+  $('#fastBtn').addEventListener('click',()=>{
+    fast = !fast; store.set('aiTeam.fast.v1', fast);
+    $('#fastBtn').setAttribute('aria-pressed', fast);
+    toast(fast ? '⚡ 바로: 보내자마자 비서를 부를 수 있어요' : '예약 시간에 처리돼요 (토큰 절약)');
+  });
   $('#forgetCfg').addEventListener('click',()=>{
     if(!confirm('이 기기에서 시트 연결 정보와 불러온 기록을 지울까요? 시트의 기록은 그대로 남아요.')) return;
     clearInterval(pollTimer);
@@ -1071,6 +1141,8 @@
   cfg = store.get(LS.cfg, cfg);
   rows = (store.get(LS.cache, []) || []).map(cleanRow).filter(r=>r.id && r.group);
   cutoff = store.get(LS.cut, 0);
+  fast = store.get('aiTeam.fast.v1', true);
+  $('#fastBtn').setAttribute('aria-pressed', fast);
   $('#cfgUrl').value = cfg.url || ''; $('#cfgToken').value = cfg.token || '';
   renderStatic(); renderChips(); renderMentionBar(); renderMode(); renderTimeline(); renderStats(); setSync('off');
   if(cfg.url && cfg.token){ refresh(); startPolling(); }
